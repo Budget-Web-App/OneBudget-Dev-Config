@@ -1,0 +1,71 @@
+version: '3'
+
+services:
+  db:
+    platform: linux/amd64
+    build: ./db
+    networks:
+      - api_net
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "accountsadmin" ]
+      interval: 10s
+      retries: 5
+
+  api:
+    platform: linux/amd64
+    build: ./api
+    networks:
+      - api_net
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - vault
+    environment:
+      VERSION: v0.5.0
+      PORT: 5000
+      ENABLE_TRACING: "true"
+      TOKEN_EXPIRY_SECONDS: 3600
+      PRIV_KEY_PATH: "/root/.ssh/privatekey"
+      PUB_KEY_PATH: "/root/.ssh/publickey"
+      SECRET: "test123"
+      DB_URI: "postgresql://accountsadmin:accountspwd@db:5432/accountsdb"
+      # Valid levels are debug, info, warning, error, critical. If no valid level is set, gunicorn will default to info.
+      LOG_LEVEL: debug
+
+  vault:
+    build: ./vault
+    networks:
+      - api_net
+    cap_add:
+      - IPC_LOCK
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "vault status -format=json | jq -e '.sealed == false'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    volumes:
+      - vault-data:/vault/data
+
+networks:
+  api_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.name: api_net
+      com.docker.network.bridge.enable_icc: "false"
+
+volumes:
+  vault-data:
