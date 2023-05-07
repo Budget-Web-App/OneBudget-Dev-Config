@@ -6,10 +6,15 @@ services:
     build: ./db
     networks:
       - api_net
+      - db_net
+    depends_on:
+      - vault
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "accountsadmin" ]
       interval: 10s
       retries: 5
+    secrets:
+      - db_password
 
   api:
     platform: linux/amd64
@@ -37,6 +42,7 @@ services:
     build: ./vault
     networks:
       - api_net
+      - db_net
     cap_add:
       - IPC_LOCK
     healthcheck:
@@ -66,6 +72,18 @@ networks:
     driver_opts:
       com.docker.network.bridge.name: api_net
       com.docker.network.bridge.enable_icc: "false"
+  db_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.29.0.0/16
+          gateway: 172.29.0.1
 
 volumes:
   vault-data:
+
+
+secrets:
+  db_password:
+    external: true
