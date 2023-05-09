@@ -13,12 +13,14 @@ services:
       test: [ "CMD", "pg_isready", "-U", "accountsadmin" ]
       interval: 10s
       retries: 5
-    secrets:
-      - db_password
 
   api:
     platform: linux/amd64
-    build: ./api
+    build:
+      context: ./api
+      args:
+        - VAULT_APPROLE_ID
+        - VAULT_APPROLE_SECRET
     networks:
       - api_net
     ports:
@@ -35,16 +37,26 @@ services:
       PUB_KEY_PATH: "/root/.ssh/publickey"
       SECRET: "test123"
       DB_URI: "postgresql://accountsadmin:accountspwd@db:5432/accountsdb"
+      API_APPROLE_ID: 1
+      API_APPROLE_SECRET: Test
       # Valid levels are debug, info, warning, error, critical. If no valid level is set, gunicorn will default to info.
       LOG_LEVEL: debug
 
   vault:
-    build: ./vault
+    build:
+      context: ./vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_DEV_ROOT_TOKEN_ID: "vault-plaintext-root-token"
+      API_APPROLE_ID: 1
+      API_APPROLE_SECRET: Test
+    cap_add:
+      - IPC_LOCK
     networks:
       - api_net
       - db_net
-    cap_add:
-      - IPC_LOCK
     healthcheck:
       test:
         [
@@ -54,8 +66,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-    environment:
-      - VAULT_ADDR=http://127.0.0.1:8200
     volumes:
       - vault-data:/vault/data
 
@@ -81,8 +91,3 @@ networks:
 
 volumes:
   vault-data:
-
-
-secrets:
-  db_password:
-    external: true
