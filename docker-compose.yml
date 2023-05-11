@@ -2,27 +2,22 @@ version: '3'
 
 services:
   db:
+    container_name: db
     platform: linux/amd64
     build: ./db
-    networks:
-      - api_net
-      - db_net
     depends_on:
       - vault
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "accountsadmin" ]
-      interval: 10s
-      retries: 5
+    ports:
+      - "5432:5432"
+    links:
+      - "vault"
 
   api:
+    container_name: api
+    restart: always
     platform: linux/amd64
     build:
       context: ./api
-      args:
-        - VAULT_APPROLE_ID
-        - VAULT_APPROLE_SECRET
-    networks:
-      - api_net
     ports:
       - "5000:5000"
     depends_on:
@@ -37,13 +32,15 @@ services:
       PUB_KEY_PATH: "/root/.ssh/publickey"
       SECRET: "test123"
       DB_URI: "postgresql://accountsadmin:accountspwd@db:5432/accountsdb"
-      VAULT_ADDR: "http://0.0.0.0:8200"
-      API_APPROLE_ID: 1
-      API_APPROLE_SECRET: Test
+      VAULT_ADDR: "http://vault:8200"
       # Valid levels are debug, info, warning, error, critical. If no valid level is set, gunicorn will default to info.
       LOG_LEVEL: debug
+    links:
+      - "vault"
+      - "db"
 
   vault:
+    container_name: vault
     restart: always
     build:
       context: ./vault
@@ -54,9 +51,6 @@ services:
       VAULT_DEV_ROOT_TOKEN_ID: "vault-plaintext-root-token"
     cap_add:
       - IPC_LOCK
-    networks:
-      - api_net
-      - db_net
     healthcheck:
       test:
         [
@@ -68,26 +62,6 @@ services:
       retries: 3
     volumes:
       - vault-data:/vault/data
-
-networks:
-  api_net:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.28.0.0/16
-          gateway: 172.28.0.1
-    internal: true
-    driver_opts:
-      com.docker.network.bridge.name: api_net
-      com.docker.network.bridge.enable_icc: "false"
-  db_net:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.29.0.0/16
-          gateway: 172.29.0.1
 
 volumes:
   vault-data:
